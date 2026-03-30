@@ -1,0 +1,12 @@
+# python bytecodes
+__pycache__/
+*.py[cod]
+
+# Streamlit local secrets (so API key is not pushed)
+.streamlit/secrets.toml
+
+# Google Sheets original key config
+key.json
+
+# Environment variables
+.env
