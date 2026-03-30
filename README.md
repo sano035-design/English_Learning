@@ -22,7 +22,7 @@ So instead of just wishing for it, I built it — using AI as my coding assistan
 
 ### 2. Overview
 
-![App Screenshot](english_learning.jpg)
+<img src="english_learning.jpg" width="600">
 
 **Tech Stack:**
 
@@ -99,7 +99,7 @@ The GitHub repo was connected to **Streamlit Cloud**, which turned the Python co
 
 ### 2. 개요
 
-![앱 화면](english_learning.jpg)
+<img src="english_learning.jpg" width="600">
 
 **사용한 기술:**
 
