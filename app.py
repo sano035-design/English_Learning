@@ -3,8 +3,9 @@ import google.generativeai as genai
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import re
 
-# 1. API Key Setup (Security: Load from Streamlit Secrets)
+# 1. API Key Setup
 try:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 except KeyError:
@@ -32,10 +33,50 @@ def get_gsheet_client():
         st.error(f"Google authentication error: {e}")
         return None
 
-# 4. UI Layout
+
+# 4. YouTube transcript helper
+def get_youtube_transcript(url):
+    """Extract video ID from URL and fetch transcript. Returns transcript text or None."""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi, TranscriptList
+        # Extract video ID from various YouTube URL formats
+        match = re.search(r"(?:v=|youtu\.be/|shorts/)([a-zA-Z0-9_-]{11})", url)
+        if not match:
+            return None
+        video_id = match.group(1)
+
+        # List all available transcripts and pick the best one automatically
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        transcript = None
+        # Priority 1: manually created English transcript
+        try:
+            transcript = transcript_list.find_manually_created_transcript(['en', 'en-US', 'en-GB'])
+        except Exception:
+            pass
+        # Priority 2: auto-generated English transcript
+        if not transcript:
+            try:
+                transcript = transcript_list.find_generated_transcript(['en', 'en-US', 'en-GB'])
+            except Exception:
+                pass
+        # Priority 3: any available transcript (any language)
+        if not transcript:
+            try:
+                transcript = next(iter(transcript_list))
+            except Exception:
+                return None
+
+        data = transcript.fetch()
+        full_text = " ".join([t['text'] for t in data])
+        return full_text[:3000]
+    except Exception:
+        return None
+
+
+# 5. UI Layout
 st.title("🤖 Daniel's English AI")
 
-# Input section: date, video source, sentence
 col1, col2 = st.columns([1, 2])
 with col1:
     input_date = st.date_input("Date", datetime.now().date())
@@ -47,21 +88,54 @@ new_sentence = st.text_input("Enter an English sentence")
 if st.button("🪄 Interpret"):
     if new_sentence:
         try:
-            # Step 1: Get Korean interpretation
-            korean_prompt = f"다음 영어 문장의 의미와 사용되는 상황을 아주 간단하게 1~2줄로 설명해줘: '{new_sentence}'"
-            korean_response = model.generate_content(korean_prompt)
-            korean_result = korean_response.text
+            # Fetch YouTube transcript if URL is provided
+            transcript_context_kr = ""
+            transcript_context_en = ""
 
-            # Step 2: Translate that Korean result into English
-            english_prompt = f"Translate the following Korean explanation into English in 1-2 sentences:\n\n{korean_result}"
-            english_response = model.generate_content(english_prompt)
-            english_result = english_response.text
+            if video_url and "youtu" in video_url:
+                with st.spinner("📺 Fetching video transcript for context..."):
+                    transcript = get_youtube_transcript(video_url)
+                if transcript:
+                    transcript_context_kr = f"\n\n[참고: 아래는 이 문장이 나온 유튜브 영상의 실제 자막입니다. 이 맥락 속에서 문장을 설명해줘]\n\"{transcript}\""
+                    transcript_context_en = f"\n\n[Context: Below is the actual transcript from the YouTube video this sentence came from. Use this context for your explanation]\n\"{transcript}\""
+                    st.info("✅ Video transcript loaded! Explanation will use the actual video context.")
+                else:
+                    transcript_context_kr = f"\n\n참고: 이 문장은 다음 유튜브 영상에서 나온 것입니다: {video_url}\n자막을 가져올 수 없어서 일반적인 맥락으로 설명해줘."
+                    transcript_context_en = f"\n\nContext: This sentence is from this YouTube video: {video_url}\nTranscript unavailable, so explain in general context."
+                    st.warning("⚠️ Could not load transcript. Using general context instead.")
+            elif video_url:
+                # Non-YouTube URL — use as general context hint
+                transcript_context_kr = f"\n\n참고: 이 문장은 다음 출처에서 나온 것입니다: {video_url}\n출처의 주제나 분위기를 고려해서 설명해줘."
+                transcript_context_en = f"\n\nContext: This sentence is from: {video_url}\nTailor your explanation to the topic and tone of this source."
+
+            # Korean prompt
+            korean_prompt = f"""다음 영어 문장에 대해 아래 형식으로 설명해줘:{transcript_context_kr}
+
+문장: '{new_sentence}'
+
+1. 📌 상황과 맥락: 이 문장이 어떤 상황에서 쓰이는지 2~3줄로 설명해줘.
+2. 🧠 영어식 사고방식: 문장의 각 부분을 영어 원어민의 시각으로 분석해줘. (예: 주어/동사/표현 의미 등)
+3. 💬 예문: 비슷한 상황에서 쓸 수 있는 예문을 하나 만들어줘."""
+
+            # English prompt
+            english_prompt = f"""Explain the following English sentence in this exact structure:{transcript_context_en}
+
+Sentence: '{new_sentence}'
+
+1. 📌 Context & Situation: When and where is this sentence used? (2-3 sentences)
+2. 🧠 English Mindset: Break down each part of the sentence from a native speaker's perspective. (subject, verb, expression meaning, etc.)
+3. 💬 Example: Give one example sentence in a similar situation."""
+
+            with st.spinner("🤖 AI is analyzing..."):
+                korean_result = model.generate_content(korean_prompt).text
+                english_result = model.generate_content(english_prompt).text
 
             st.session_state['date'] = input_date.strftime("%Y-%m-%d")
             st.session_state['video'] = video_url
             st.session_state['sentence'] = new_sentence
-            st.session_state['result_korean'] = korean_result      # saved to sheet
-            st.session_state['result_english'] = english_result    # display only
+            st.session_state['result_korean'] = korean_result
+            st.session_state['result_english'] = english_result
+
         except Exception as e:
             st.error(f"Error: {e}")
     else:
@@ -80,7 +154,6 @@ if 'result_korean' in st.session_state:
         if client:
             try:
                 sh = client.open("English_Practice_DB").get_worksheet(0)
-                # Only save Korean interpretation — NOT the English translation
                 sh.append_row([
                     st.session_state['date'],
                     st.session_state['sentence'],
