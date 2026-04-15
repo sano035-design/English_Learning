@@ -4,6 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import re
+import requests
 
 # 1. API Key Setup
 try:
@@ -74,7 +75,25 @@ def get_youtube_transcript(url):
         return None
 
 
-# 5. UI Layout
+# 5. YouTube video title helper (fallback when transcript is unavailable)
+def get_youtube_title(url):
+    """Fetch the YouTube video title from the page metadata."""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=5)
+        match = re.search(r'<title>(.*?) - YouTube</title>', response.text)
+        if match:
+            return match.group(1).strip()
+        # Fallback: og:title meta tag
+        match = re.search(r'property="og:title" content="(.*?)"', response.text)
+        if match:
+            return match.group(1).strip()
+        return None
+    except Exception:
+        return None
+
+
+# 6. UI Layout
 st.title("🤖 Daniel's English AI")
 
 col1, col2 = st.columns([1, 2])
@@ -100,9 +119,16 @@ if st.button("🪄 Interpret"):
                     transcript_context_en = f"\n\n[Context: Below is the actual transcript from the YouTube video this sentence came from. Use this context for your explanation]\n\"{transcript}\""
                     st.info("✅ Video transcript loaded! Explanation will use the actual video context.")
                 else:
-                    transcript_context_kr = f"\n\n참고: 이 문장은 다음 유튜브 영상에서 나온 것입니다: {video_url}\n자막을 가져올 수 없어서 일반적인 맥락으로 설명해줘."
-                    transcript_context_en = f"\n\nContext: This sentence is from this YouTube video: {video_url}\nTranscript unavailable, so explain in general context."
-                    st.warning("⚠️ Could not load transcript. Using general context instead.")
+                    # Fallback: fetch video title for context
+                    video_title = get_youtube_title(video_url)
+                    if video_title:
+                        transcript_context_kr = f"\n\n참고: 이 문장은 유튜브 영상 \"{video_title}\"에서 나온 것입니다. 이 영상의 제목과 주제를 고려해서 맥락을 설명해줘."
+                        transcript_context_en = f"\n\nContext: This sentence is from a YouTube video titled \"{video_title}\". Use what you know about this title/topic to provide relevant context."
+                        st.info(f"📌 Using video title as context: **{video_title}**")
+                    else:
+                        transcript_context_kr = f"\n\n참고: 이 문장은 다음 유튜브 영상에서 나온 것입니다: {video_url}\n자막을 가져올 수 없어서 일반적인 맥락으로 설명해줘."
+                        transcript_context_en = f"\n\nContext: This sentence is from this YouTube video: {video_url}\nTranscript unavailable, so explain in general context."
+                        st.warning("⚠️ Could not load transcript or title. Using general context instead.")
             elif video_url:
                 # Non-YouTube URL — use as general context hint
                 transcript_context_kr = f"\n\n참고: 이 문장은 다음 출처에서 나온 것입니다: {video_url}\n출처의 주제나 분위기를 고려해서 설명해줘."
