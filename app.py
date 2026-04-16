@@ -109,14 +109,12 @@ if st.button("🪄 Interpret"):
         try:
             # Fetch YouTube transcript if URL is provided
             transcript_context_kr = ""
-            transcript_context_en = ""
 
             if video_url and "youtu" in video_url:
                 with st.spinner("📺 Fetching video transcript for context..."):
                     transcript = get_youtube_transcript(video_url)
                 if transcript:
                     transcript_context_kr = f"\n\n[참고: 아래는 이 문장이 나온 유튜브 영상의 실제 자막입니다. 이 맥락 속에서 문장을 설명해줘]\n\"{transcript}\""
-                    transcript_context_en = f"\n\n[Context: Below is the actual transcript from the YouTube video this sentence came from. Use this context for your explanation]\n\"{transcript}\""
                     st.info("✅ Video transcript loaded! Explanation will use the actual video context.")
                 else:
                     # Fallback: fetch video title for context
@@ -127,12 +125,9 @@ if st.button("🪄 Interpret"):
                         st.info(f"📌 Using video title as context: **{video_title}**")
                     else:
                         transcript_context_kr = f"\n\n참고: 이 문장은 다음 유튜브 영상에서 나온 것입니다: {video_url}\n자막을 가져올 수 없어서 일반적인 맥락으로 설명해줘."
-                        transcript_context_en = f"\n\nContext: This sentence is from this YouTube video: {video_url}\nTranscript unavailable, so explain in general context."
                         st.warning("⚠️ Could not load transcript or title. Using general context instead.")
             elif video_url:
-                # Non-YouTube URL — use as general context hint
                 transcript_context_kr = f"\n\n참고: 이 문장은 다음 출처에서 나온 것입니다: {video_url}\n출처의 주제나 분위기를 고려해서 설명해줘."
-                transcript_context_en = f"\n\nContext: This sentence is from: {video_url}\nTailor your explanation to the topic and tone of this source."
 
             # Korean prompt
             korean_prompt = f"""다음 영어 문장에 대해 아래 형식으로 설명해줘:{transcript_context_kr}
@@ -143,24 +138,13 @@ if st.button("🪄 Interpret"):
 2. 🧠 영어식 사고방식: 문장의 각 부분을 영어 원어민의 시각으로 분석해줘. (예: 주어/동사/표현 의미 등)
 3. 💬 예문: 비슷한 상황에서 쓸 수 있는 예문을 하나 만들어줘."""
 
-            # English prompt
-            english_prompt = f"""Explain the following English sentence in this exact structure:{transcript_context_en}
-
-Sentence: '{new_sentence}'
-
-1. 📌 Context & Situation: When and where is this sentence used? (2-3 sentences)
-2. 🧠 English Mindset: Break down each part of the sentence from a native speaker's perspective. (subject, verb, expression meaning, etc.)
-3. 💬 Example: Give one example sentence in a similar situation."""
-
             with st.spinner("🤖 AI is analyzing..."):
                 korean_result = model.generate_content(korean_prompt).text
-                english_result = model.generate_content(english_prompt).text
 
             st.session_state['date'] = input_date.strftime("%Y-%m-%d")
             st.session_state['video'] = video_url
             st.session_state['sentence'] = new_sentence
             st.session_state['result_korean'] = korean_result
-            st.session_state['result_english'] = english_result
 
         except Exception as e:
             st.error(f"Error: {e}")
@@ -172,8 +156,7 @@ if 'result_korean' in st.session_state:
     st.markdown(f"**🗓️ Date:** {st.session_state['date']}")
     if st.session_state['video']:
         st.markdown(f"[🔗 Video Source]({st.session_state['video']})")
-    st.info(f"🗣️ **Sentence:** {st.session_state['sentence']}\n\n💡 **Interpretation (Korean):**\n{st.session_state['result_korean']}")
-    st.success(f"🌏 **Interpretation (English):**\n{st.session_state['result_english']}")
+    st.info(f"🗣️ **Sentence:** {st.session_state['sentence']}\n\n💡 **Interpretation:**\n{st.session_state['result_korean']}")
 
     if st.button("💾 Save to Sheet"):
         client = get_gsheet_client()
