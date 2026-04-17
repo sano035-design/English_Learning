@@ -14,7 +14,7 @@ except KeyError:
     st.stop()
 
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL = 'gemini-2.0-flash'
+MODEL = 'gemini-2.5-flash'
 
 
 # 3. Google Sheet Authentication
