@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -13,9 +13,8 @@ except KeyError:
     st.error("API key not found. Please check your .streamlit/secrets.toml file or Streamlit Cloud Secrets.")
     st.stop()
 
-# 2. AI Setup
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+client = genai.Client(api_key=GEMINI_API_KEY)
+MODEL = 'gemini-1.5-flash'
 
 
 # 3. Google Sheet Authentication
@@ -139,7 +138,9 @@ if st.button("🪄 Interpret"):
 3. 💬 예문: 비슷한 상황에서 쓸 수 있는 예문을 하나 만들어줘."""
 
             with st.spinner("🤖 AI is analyzing..."):
-                korean_result = model.generate_content(korean_prompt).text
+                korean_result = client.models.generate_content(
+                    model=MODEL, contents=korean_prompt
+                ).text
 
             st.session_state['date'] = input_date.strftime("%Y-%m-%d")
             st.session_state['video'] = video_url
